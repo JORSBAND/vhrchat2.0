@@ -56,7 +56,8 @@
             updateProfile,
             signOut,
             signInAnonymously,
-            signInWithCustomToken
+            signInWithCustomToken,
+            sendPasswordResetEmail
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { 
             getFirestore, 
@@ -83,14 +84,13 @@
             Plus, Search, Trash2, Edit, ArrowLeft, Send, Hash, Lock, Users,
             Clock, AlertCircle, ArrowRight, TrendingUp, Filter, Download,
             FileText, File, MoreVertical, Move, Power, Shield, Activity,
-            Briefcase, Building, Camera, Save, CheckCircle2, Bell, ChevronLeft, ChevronRight, Folder, FolderPlus, Upload, LayoutTemplate, Eye, CornerDownLeft, UserPlus, Pencil, FileIcon, MoreHorizontal, FileSpreadsheet, RefreshCw, XCircle
+            Briefcase, Building, Camera, Save, CheckCircle2, Bell, ChevronLeft, ChevronRight, Folder, FolderPlus, Upload, LayoutTemplate, Eye, CornerDownLeft, UserPlus, Pencil, FileIcon, MoreHorizontal, FileSpreadsheet, RefreshCw, XCircle, Mail, KeyRound
         } from 'https://esm.sh/lucide-react@0.294.0?external=react';
         
         import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, parseISO } from 'https://esm.sh/date-fns@2.30.0';
         import { uk } from 'https://esm.sh/date-fns@2.30.0/locale';
 
         // --- FIREBASE SETUP ---
-        // ВАШІ КЛЮЧІ (vhr2-0)
         const firebaseConfig = {
             apiKey: "AIzaSyBOCGP-PAdxhohSUjIbhlb2W_PvMAi9__4",
             authDomain: "vhr2-0.firebaseapp.com",
@@ -101,20 +101,19 @@
             measurementId: "G-L11R2GYC9X"
         };
 
-        // Ініціалізація з вашими ключами напряму
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const googleProvider = new GoogleAuthProvider();
         
-        // Використовуємо ваш App ID як ідентифікатор колекції
+        // Auth Providers
+        const googleProvider = new GoogleAuthProvider();
+        // Apple provider removed
+        
         const appId = "vhr2-0-production"; 
 
-        // Paths helper
         const getCollectionRef = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
 
-        // Logger helper
         const logAction = async (user, action, entity, details) => {
             if (!user) return;
             try {
@@ -126,9 +125,7 @@
                     user_id: user.id,
                     created_date: new Date().toISOString()
                 });
-            } catch (e) {
-                console.error("Failed to log action", e);
-            }
+            } catch (e) { console.error("Failed to log action", e); }
         };
 
         // --- UI COMPONENTS ---
@@ -194,6 +191,26 @@
         const DialogContent = ({ children, className }) => <div className={className || ''}>{children}</div>;
         const DialogHeader = ({ className, ...props }) => <div className={`flex flex-col space-y-1.5 text-center sm:text-left mb-4 ${className || ''}`} {...props} />;
         const DialogTitle = ({ className, ...props }) => <h2 className={`text-lg font-semibold leading-none tracking-tight ${className || ''}`} {...props} />;
+
+        // Reusable Confirmation Modal
+        const ConfirmDialog = ({ open, onOpenChange, title, description, onConfirm, isLoading }) => (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-red-600 flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5" /> {title || "Підтвердження дії"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-gray-600 my-2">{description || "Ви впевнені, що хочете виконати цю дію? Це неможливо скасувати."}</p>
+                    <div className="flex justify-end gap-3 mt-4">
+                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>Скасувати</Button>
+                        <Button variant="destructive" onClick={onConfirm} disabled={isLoading}>
+                            {isLoading ? "Обробка..." : "Видалити"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        );
 
         const Tabs = ({ defaultValue, className, children }) => {
             const [activeTab, setActiveTab] = useState(defaultValue);
@@ -378,25 +395,11 @@
             const [name, setName] = useState('');
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
-
-            const handleGoogleLogin = async () => {
-                setError('');
-                setLoading(true);
-                try {
-                    const result = await signInWithPopup(auth, googleProvider);
-                    await checkAndCreateUser(result.user, result.user.displayName || 'Google User');
-                } catch (err) {
-                    console.error(err);
-                    // Friendly error mapping
-                    if (err.code === 'auth/operation-not-allowed') {
-                        setError("Помилка налаштування: Вхід через Google вимкнено в Firebase Console. Будь ласка, увімкніть його.");
-                    } else {
-                        setError(err.message);
-                    }
-                } finally {
-                    setLoading(false);
-                }
-            };
+            
+            // Reset Password State
+            const [isResetOpen, setIsResetOpen] = useState(false);
+            const [resetEmail, setResetEmail] = useState('');
+            const [resetStatus, setResetStatus] = useState({ type: '', msg: '' });
 
             const checkAndCreateUser = async (user, userName) => {
                 const userRef = doc(getCollectionRef('users'), user.uid);
@@ -404,7 +407,6 @@
                 
                 if (!userSnap.exists()) {
                     const usersSnapshot = await getDocs(getCollectionRef('users'));
-                    // First user becomes admin
                     const role = usersSnapshot.empty ? 'admin' : 'user';
                     
                     await setDoc(userRef, {
@@ -420,6 +422,26 @@
                     logAction({id: user.uid, full_name: userName}, 'register', 'User', `Новий користувач зареєструвався: ${userName}`);
                 } else {
                     await updateDoc(userRef, { last_seen: new Date().toISOString() });
+                }
+            };
+
+            const handleSocialLogin = async (provider, providerName) => {
+                setError('');
+                setLoading(true);
+                try {
+                    const result = await signInWithPopup(auth, provider);
+                    await checkAndCreateUser(result.user, result.user.displayName || 'User');
+                } catch (err) {
+                    console.error(err);
+                    if (err.code === 'auth/operation-not-allowed') {
+                        setError(`Помилка: Вхід через ${providerName} вимкнено. Активуйте його в Firebase Console.`);
+                    } else if (err.code === 'auth/account-exists-with-different-credential') {
+                        setError("Акаунт з таким email вже існує, використайте інший метод входу.");
+                    } else {
+                        setError(err.message);
+                    }
+                } finally {
+                    setLoading(false);
                 }
             };
 
@@ -440,20 +462,25 @@
                 } catch (err) {
                     console.error(err);
                     let msg = err.message;
-                    if (err.code === 'auth/operation-not-allowed') {
-                        msg = "ПОМИЛКА: Email/Password вхід не увімкнено в Firebase Console. Увімкніть його в Authentication > Sign-in method.";
-                    } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
-                        msg = "Невірний email або пароль. Перевірте дані або зареєструйтесь.";
-                    } else if (err.code === 'auth/user-not-found') {
-                        msg = "Користувача не знайдено. Будь ласка, зареєструйтесь.";
-                    } else if (err.code === 'auth/wrong-password') {
-                        msg = "Невірний пароль.";
-                    } else if (err.code === 'auth/email-already-in-use') {
-                        msg = "Цей email вже використовується. Спробуйте увійти.";
-                    } else if (err.code === 'auth/weak-password') {
-                        msg = "Пароль занадто слабкий (мінімум 6 символів).";
-                    }
+                    // Error handling simplified
+                    if (err.code === 'auth/invalid-credential') msg = "Невірний email або пароль.";
+                    else if (err.code === 'auth/email-already-in-use') msg = "Email вже використовується.";
                     setError(msg);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handlePasswordReset = async (e) => {
+                e.preventDefault();
+                if(!resetEmail) return;
+                setLoading(true);
+                try {
+                    await sendPasswordResetEmail(auth, resetEmail);
+                    setResetStatus({ type: 'success', msg: 'Лист з інструкціями відправлено на ваш Email! Перевірте папку "Спам", якщо не бачите листа.' });
+                    setTimeout(() => { setIsResetOpen(false); setResetStatus({type:'', msg:''}); }, 5000);
+                } catch (err) {
+                    setResetStatus({ type: 'error', msg: err.message });
                 } finally {
                     setLoading(false);
                 }
@@ -481,7 +508,14 @@
                                     <Input type="email" placeholder="user@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Пароль</label>
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-sm font-medium">Пароль</label>
+                                        {isLogin && (
+                                            <button type="button" onClick={() => setIsResetOpen(true)} className="text-xs text-blue-600 hover:underline">
+                                                Забули пароль?
+                                            </button>
+                                        )}
+                                    </div>
                                     <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                                 </div>
                                 {error && (
@@ -500,10 +534,12 @@
                                 <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-muted-foreground">Або</span></div>
                             </div>
 
-                            <Button variant="outline" type="button" className="w-full" onClick={handleGoogleLogin} disabled={loading}>
-                                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                                Увійти через Google
-                            </Button>
+                            <div className="grid grid-cols-1 gap-2">
+                                <Button variant="outline" type="button" onClick={() => handleSocialLogin(googleProvider, 'Google')} disabled={loading}>
+                                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                                    Google
+                                </Button>
+                            </div>
 
                             <div className="mt-4 text-center text-sm">
                                 <span className="text-gray-500">
@@ -519,6 +555,30 @@
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Password Reset Modal */}
+                    <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Відновлення паролю</DialogTitle>
+                            </DialogHeader>
+                            <p className="text-sm text-gray-500 mb-4">Введіть ваш Email, щоб отримати посилання для скидання паролю.</p>
+                            <form onSubmit={handlePasswordReset} className="space-y-4">
+                                <div className="relative">
+                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
+                                    <Input className="pl-9" type="email" placeholder="user@example.com" value={resetEmail} onChange={e => setResetEmail(e.target.value)} required />
+                                </div>
+                                {resetStatus.msg && (
+                                    <div className={`p-3 rounded text-sm border ${resetStatus.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                        {resetStatus.msg}
+                                    </div>
+                                )}
+                                <Button type="submit" className="w-full" disabled={loading}>
+                                    {loading ? 'Відправка...' : 'Відправити лист'}
+                                </Button>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             );
         }
@@ -670,7 +730,6 @@
             );
         }
 
-        // --- [CHAT COMPONENT - Inserted Here] ---
         function Chat({ user }) {
             const [channels, setChannels] = useState([]);
             const [selectedChannel, setSelectedChannel] = useState(null);
@@ -684,6 +743,9 @@
             const [allUsers, setAllUsers] = useState([]);
             const [editingMessage, setEditingMessage] = useState(null);
             const [editText, setEditText] = useState('');
+            
+            // Delete States
+            const [confirmState, setConfirmState] = useState({ open: false, type: '', id: '' });
 
             useEffect(() => {
                 if (!user) return;
@@ -735,12 +797,20 @@
                 setIsCreateOpen(false); setNewChannelName(''); setChannelType('general'); setSelectedMembers([]);
             };
 
-            const deleteChannel = async (e, id) => {
-                e.stopPropagation();
-                if(confirm('Видалити цей чат?')) {
-                    await deleteDoc(doc(getCollectionRef('channels'), id));
-                    logAction(user, 'delete', 'Channel', `Channel deleted: ${id}`);
+            const handleDeleteConfirm = async () => {
+                if (confirmState.type === 'channel') {
+                    await deleteDoc(doc(getCollectionRef('channels'), confirmState.id));
+                    logAction(user, 'delete', 'Channel', `Channel deleted: ${confirmState.id}`);
+                    if(selectedChannel?.id === confirmState.id) setSelectedChannel(null);
+                } else if (confirmState.type === 'message') {
+                    await deleteDoc(doc(getCollectionRef('messages'), confirmState.id));
                 }
+                setConfirmState({ open: false, type: '', id: '' });
+            };
+
+            const requestDeleteChannel = (e, id) => {
+                e.stopPropagation();
+                setConfirmState({ open: true, type: 'channel', id });
             };
 
             const sendMessage = async () => {
@@ -761,12 +831,6 @@
                     content: editText
                 });
                 setEditingMessage(null);
-            };
-
-            const deleteMessage = async (msgId) => {
-                if (confirm('Видалити це повідомлення?')) {
-                    await deleteDoc(doc(getCollectionRef('messages'), msgId));
-                }
             };
 
             return (
@@ -792,7 +856,7 @@
                                 {c.type === 'private' ? <Lock className="w-4 h-4 flex-shrink-0 text-orange-500"/> : c.type === 'admin' ? <Shield className="w-4 h-4 text-red-500"/> : <Hash className="w-4 h-4 flex-shrink-0"/>}
                                 <div className="flex-1 min-w-0"><p className="font-medium truncate">{c.name}</p></div>
                                 {(user.role === 'admin' || c.created_by === user.id) && (
-                                    <div onClick={(e) => deleteChannel(e, c.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500 transition-opacity">
+                                    <div onClick={(e) => requestDeleteChannel(e, c.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500 transition-opacity">
                                         <Trash2 className="w-3 h-3"/>
                                     </div>
                                 )}
@@ -829,7 +893,7 @@
                                                 {(m.sender_id === user.id || user.role === 'admin') && (
                                                     <div className={`absolute top-1 ${m.sender_id === user.id ? '-left-12' : '-right-12'} opacity-0 group-hover/msg:opacity-100 flex gap-1`}>
                                                         {m.sender_id === user.id && <button onClick={() => { setEditingMessage(m); setEditText(m.content); }} className="p-1 hover:bg-gray-200 rounded-full bg-white shadow text-blue-600"><Edit className="w-3 h-3"/></button>}
-                                                        <button onClick={() => deleteMessage(m.id)} className="p-1 hover:bg-red-100 rounded-full bg-white shadow text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                                        <button onClick={() => setConfirmState({ open: true, type: 'message', id: m.id })} className="p-1 hover:bg-red-100 rounded-full bg-white shadow text-red-500"><Trash2 className="w-3 h-3"/></button>
                                                     </div>
                                                 )}
                                             </div>
@@ -894,6 +958,14 @@
                         <Button onClick={handleEditMessage} className="w-full mt-4">Зберегти</Button>
                     </DialogContent>
                 </Dialog>
+
+                <ConfirmDialog 
+                    open={confirmState.open}
+                    onOpenChange={(val) => setConfirmState({...confirmState, open: val})}
+                    onConfirm={handleDeleteConfirm}
+                    title={confirmState.type === 'channel' ? "Видалити канал?" : "Видалити повідомлення?"}
+                    description={confirmState.type === 'channel' ? "Всі повідомлення в цьому каналі будуть втрачені." : ""}
+                />
                 </div>
             );
         }
@@ -905,6 +977,7 @@
             const [users, setUsers] = useState([]);
             const [filter, setFilter] = useState('all');
             const [assignedTo, setAssignedTo] = useState([]);
+            const [deleteId, setDeleteId] = useState(null);
 
             useEffect(() => {
                 if (!user) return;
@@ -932,12 +1005,14 @@
                 setAssignedTo([]);
             };
 
-            const deleteTask = async (id) => {
-                if(confirm('Видалити завдання?')) {
-                    await deleteDoc(doc(getCollectionRef('tasks'), id));
-                    logAction(user, 'delete', 'Task', `Task deleted: ${id}`);
+            const handleDelete = async () => {
+                if(deleteId) {
+                    await deleteDoc(doc(getCollectionRef('tasks'), deleteId));
+                    logAction(user, 'delete', 'Task', `Task deleted: ${deleteId}`);
+                    setDeleteId(null);
                 }
             };
+            
             const updateStatus = async (id, status) => {
                 await updateDoc(doc(getCollectionRef('tasks'), id), { status });
                 logAction(user, 'update', 'Task', `Task status updated to: ${status}`);
@@ -1033,7 +1108,7 @@
                                         <CardTitle className="text-lg font-bold">{task.title}</CardTitle>
                                         <div className="flex gap-1 items-center">
                                             <Badge className={priorityColors[task.priority]}>{task.priority}</Badge>
-                                            {user.role === 'admin' && <button onClick={() => deleteTask(task.id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 className="w-4 h-4"/></button>}
+                                            {user.role === 'admin' && <button onClick={() => setDeleteId(task.id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 className="w-4 h-4"/></button>}
                                         </div>
                                     </div>
                                 </CardHeader>
@@ -1057,6 +1132,7 @@
                             </Card>
                         ))}
                     </div>
+                    <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Видалити завдання?"/>
                 </div>
             );
         }
@@ -1065,6 +1141,7 @@
             const [polls, setPolls] = useState([]);
             const [newPoll, setNewPoll] = useState({ title: '', description: '', options: ['', ''], category: 'Other', closing_date: '', min_quorum: 0, anonymous: false });
             const [isCreateOpen, setIsCreateOpen] = useState(false);
+            const [deleteId, setDeleteId] = useState(null);
 
             useEffect(() => {
                 if (!user) return;
@@ -1105,10 +1182,11 @@
                 });
             };
             
-            const deletePoll = async (id) => {
-                if(confirm('Видалити опитування?')) {
-                    await deleteDoc(doc(getCollectionRef('polls'), id));
-                    logAction(user, 'delete', 'Poll', `Poll deleted: ${id}`);
+            const handleDelete = async () => {
+                if (deleteId) {
+                    await deleteDoc(doc(getCollectionRef('polls'), deleteId));
+                    logAction(user, 'delete', 'Poll', `Poll deleted: ${deleteId}`);
+                    setDeleteId(null);
                 }
             };
 
@@ -1173,7 +1251,7 @@
                                     <CardHeader>
                                         <div className="flex justify-between">
                                             <CardTitle className="text-xl">{poll.title}</CardTitle>
-                                            {user.role === 'admin' && <button onClick={() => deletePoll(poll.id)} className="text-red-500"><Trash2 className="w-4 h-4"/></button>}
+                                            {user.role === 'admin' && <button onClick={() => setDeleteId(poll.id)} className="text-red-500"><Trash2 className="w-4 h-4"/></button>}
                                         </div>
                                         <p className="text-sm text-gray-500">{poll.description}</p>
                                         <div className="text-sm text-gray-500 flex gap-4 mt-2">
@@ -1206,6 +1284,7 @@
                             );
                         })}
                     </div>
+                    <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Видалити опитування?"/>
                 </div>
             );
         }
@@ -1215,6 +1294,7 @@
             const [isCreate, setIsCreate] = useState(false);
             const [newAnn, setNewAnn] = useState({ title: '', content: '', priority: 'Normal', category: 'General', requires_ack: false });
             const [ackData, setAckData] = useState([]);
+            const [deleteId, setDeleteId] = useState(null);
 
             useEffect(() => {
                 if (!user) return;
@@ -1243,10 +1323,11 @@
                 await addDoc(getCollectionRef('acknowledgements'), { annId, userId: user.id });
             };
             
-            const deleteAnn = async (id) => {
-                if(confirm('Видалити оголошення?')) {
-                    await deleteDoc(doc(getCollectionRef('announcements'), id));
-                    logAction(user, 'delete', 'Announcement', `Announcement deleted: ${id}`);
+            const handleDelete = async () => {
+                if(deleteId) {
+                    await deleteDoc(doc(getCollectionRef('announcements'), deleteId));
+                    logAction(user, 'delete', 'Announcement', `Announcement deleted: ${deleteId}`);
+                    setDeleteId(null);
                 }
             }
 
@@ -1304,7 +1385,7 @@
                                             </div>
                                             <p className="text-sm text-gray-500">Автор: {ann.author_name} • {ann.created_date ? format(new Date(ann.created_date), 'dd.MM.yyyy') : ''}</p>
                                         </div>
-                                        {user.role === 'admin' && <button onClick={() => deleteAnn(ann.id)}><Trash2 className="w-4 h-4 text-red-500"/></button>}
+                                        {user.role === 'admin' && <button onClick={() => setDeleteId(ann.id)}><Trash2 className="w-4 h-4 text-red-500"/></button>}
                                     </div>
                                 </CardHeader>
                                 <CardContent>
@@ -1320,6 +1401,7 @@
                             </Card>
                         ))}
                     </div>
+                    <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Видалити оголошення?"/>
                 </div>
             );
         }
@@ -1331,6 +1413,7 @@
             const [isCreateFolder, setIsCreateFolder] = useState(false);
             const [folderName, setFolderName] = useState('');
             const [isConvertOpen, setIsConvertOpen] = useState(false);
+            const [deleteState, setDeleteState] = useState({ id: null, type: null });
 
             useEffect(() => {
                 if (!user) return;
@@ -1349,14 +1432,12 @@
                 setIsCreateFolder(false); setFolderName('');
             };
 
-            const deleteFolder = async (folderId) => {
-                if (!confirm("Видалити папку?")) return;
-                await deleteDoc(doc(getCollectionRef('folders'), folderId));
-            };
-
-            const deleteFile = async (docId) => {
-                if (!confirm("Видалити файл?")) return;
-                await deleteDoc(doc(getCollectionRef('documents'), docId));
+            const handleDelete = async () => {
+                const { id, type } = deleteState;
+                if (!id) return;
+                if (type === 'folder') await deleteDoc(doc(getCollectionRef('folders'), id));
+                else await deleteDoc(doc(getCollectionRef('documents'), id));
+                setDeleteState({ id: null, type: null });
             };
 
             const uploadFile = async (e) => {
@@ -1438,7 +1519,7 @@
                                     <Folder className="w-10 h-10 text-blue-500"/>
                                     <div><p className="font-semibold">{f.name}</p><p className="text-xs text-gray-500">Папка</p></div>
                                     {(user.role === 'admin' || f.created_by === user.id) && (
-                                        <button onClick={(e) => {e.stopPropagation(); deleteFolder(f.id)}} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                        <button onClick={(e) => {e.stopPropagation(); setDeleteState({id: f.id, type: 'folder'})}} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500"><Trash2 className="w-4 h-4"/></button>
                                     )}
                                 </CardContent>
                             </Card>
@@ -1455,13 +1536,19 @@
                                         <button onClick={() => downloadFile(d.url, d.name)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Download className="w-4 h-4"/></button>
                                     </div>
                                     {(user.role === 'admin' || d.uploader_id === user.id) && (
-                                        <button onClick={() => deleteFile(d.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                        <button onClick={() => setDeleteState({id: d.id, type: 'file'})} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500"><Trash2 className="w-4 h-4"/></button>
                                     )}
                                 </CardContent>
                             </Card>
                         ))}
                         {filteredFolders.length === 0 && filteredDocs.length === 0 && <div className="col-span-full text-center py-12 text-gray-500">Папка порожня</div>}
                     </div>
+                    <ConfirmDialog 
+                        open={!!deleteState.id} 
+                        onOpenChange={() => setDeleteState({id: null, type: null})} 
+                        onConfirm={handleDelete} 
+                        title={deleteState.type === 'folder' ? "Видалити папку?" : "Видалити файл?"}
+                    />
                 </div>
             );
         }
@@ -1576,6 +1663,8 @@
             const [selectedUser, setSelectedUser] = useState(null);
             const [isEditOpen, setIsEditOpen] = useState(false);
             const [platformName, setPlatformName] = useState("Платформа ГГР");
+            const [deleteState, setDeleteState] = useState({ id: null, col: null });
+            const [isSuccessOpen, setIsSuccessOpen] = useState(false);
 
             useEffect(() => {
                 if(user.role !== 'admin') return;
@@ -1598,10 +1687,12 @@
                 setIsEditOpen(false); setSelectedUser(null);
             };
 
-            const deleteItem = async (col, id) => {
-                if(confirm('Видалити цей елемент?')) {
+            const handleDelete = async () => {
+                const { id, col } = deleteState;
+                if(id && col) {
                     await deleteDoc(doc(getCollectionRef(col), id));
                     logAction(user, 'delete', col, `Deleted item ${id}`);
+                    setDeleteState({ id: null, col: null });
                 }
             };
 
@@ -1675,8 +1766,7 @@
                                                     <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-medium ${u.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{u.is_active !== false ? 'Активний' : 'Блок'}</span></td>
                                                     <td className="p-4 flex gap-3">
                                                         <button onClick={() => { setSelectedUser(u); setIsEditOpen(true); }} className="text-gray-500 hover:text-blue-600"><Pencil className="w-4 h-4"/></button>
-                                                        <button className="text-gray-500 hover:text-orange-600"><Power className="w-4 h-4"/></button>
-                                                        <button onClick={() => deleteItem('users', u.id)} className="text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                                                        <button onClick={() => setDeleteState({ id: u.id, col: 'users' })} className="text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1715,7 +1805,7 @@
                                         {content.anns.map(a => (
                                             <div key={a.id} className="flex justify-between items-center p-3 border rounded bg-gray-50">
                                                 <span className="font-medium truncate max-w-[200px]">{a.title}</span>
-                                                <Button variant="ghost" size="sm" className="text-red-500" onClick={() => deleteItem('announcements', a.id)}><Trash2 className="w-4 h-4"/></Button>
+                                                <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setDeleteState({ id: a.id, col: 'announcements' })}><Trash2 className="w-4 h-4"/></Button>
                                             </div>
                                         ))}
                                     </CardContent>
@@ -1726,7 +1816,7 @@
                                         {content.polls.map(p => (
                                             <div key={p.id} className="flex justify-between items-center p-3 border rounded bg-gray-50">
                                                 <span className="font-medium truncate max-w-[200px]">{p.title}</span>
-                                                <Button variant="ghost" size="sm" className="text-red-500" onClick={() => deleteItem('polls', p.id)}><Trash2 className="w-4 h-4"/></Button>
+                                                <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setDeleteState({ id: p.id, col: 'polls' })}><Trash2 className="w-4 h-4"/></Button>
                                             </div>
                                         ))}
                                     </CardContent>
@@ -1742,7 +1832,7 @@
                                         <label className="block text-sm font-medium mb-1">Назва платформи</label>
                                         <Input value={platformName} onChange={e => setPlatformName(e.target.value)}/>
                                     </div>
-                                    <Button onClick={() => alert("Налаштування збережено (Mock)")}>Зберегти</Button>
+                                    <Button onClick={() => setIsSuccessOpen(true)}>Зберегти</Button>
                                 </CardContent>
                             </Card>
                         </TabsContent>
@@ -1784,6 +1874,24 @@
                                     <Button onClick={handleUpdateUser} variant="success" className="w-full mt-4 bg-emerald-50/50 text-emerald-600 hover:bg-emerald-100 border-none shadow-none font-bold">Зберегти зміни</Button>
                                 </div>
                             )}
+                        </DialogContent>
+                    </Dialog>
+
+                    <ConfirmDialog 
+                        open={!!deleteState.id} 
+                        onOpenChange={() => setDeleteState({id: null, col: null})} 
+                        onConfirm={handleDelete} 
+                        title="Видалити елемент?"
+                    />
+
+                    <Dialog open={isSuccessOpen} onOpenChange={setIsSuccessOpen}>
+                        <DialogContent>
+                            <div className="flex flex-col items-center text-center py-4">
+                                <CheckCircle2 className="w-12 h-12 text-green-500 mb-4"/>
+                                <h3 className="text-xl font-bold">Збережено!</h3>
+                                <p className="text-gray-500 mb-6">Налаштування успішно оновлено.</p>
+                                <Button onClick={() => setIsSuccessOpen(false)} className="w-full">Гаразд</Button>
+                            </div>
                         </DialogContent>
                     </Dialog>
                 </div>
@@ -1865,14 +1973,10 @@
             const [currentPage, setCurrentPage] = useState('Dashboard');
 
             useEffect(() => {
-                // Initialize Auth
                 const initAuth = async () => {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        // Optionally: await signInAnonymously(auth); 
-                        // Not forcing anonymous sign-in to allow manual login UI
-                    }
+                    } 
                 };
                 initAuth();
                 
@@ -1882,7 +1986,6 @@
                         
                         const userSnap = await getDoc(userRef);
                         if (!userSnap.exists()) {
-                            // Fallback create
                             await setDoc(userRef, {
                                 id: currentUser.uid,
                                 full_name: currentUser.displayName || 'User',
@@ -1890,6 +1993,7 @@
                                 role: 'user',
                                 is_active: true,
                                 created_date: new Date().toISOString(),
+                                avatar_url: currentUser.photoURL,
                             }, { merge: true });
                         } else {
                              await updateDoc(userRef, { last_seen: new Date().toISOString() });
@@ -1946,7 +2050,6 @@
             );
         };
 
-        // Mount App
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
 
