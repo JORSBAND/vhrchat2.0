@@ -74,7 +74,10 @@
             getDoc,
             getDocs,
             limit,
-            serverTimestamp
+            serverTimestamp,
+            deleteField,
+            arrayUnion,
+            arrayRemove
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
         // Icons & Utilities
@@ -84,7 +87,7 @@
             Plus, Search, Trash2, Edit, ArrowLeft, Send, Hash, Lock, Users,
             Clock, AlertCircle, ArrowRight, TrendingUp, Filter, Download,
             FileText, File, MoreVertical, Move, Power, Shield, Activity,
-            Briefcase, Building, Camera, Save, CheckCircle2, Bell, ChevronLeft, ChevronRight, Folder, FolderPlus, Upload, LayoutTemplate, Eye, CornerDownLeft, UserPlus, Pencil, FileIcon, MoreHorizontal, FileSpreadsheet, RefreshCw, XCircle, Mail, KeyRound
+            Briefcase, Building, Camera, Save, CheckCircle2, Bell, ChevronLeft, ChevronRight, Folder, FolderPlus, Upload, LayoutTemplate, Eye, CornerDownLeft, UserPlus, Pencil, FileIcon, MoreHorizontal, FileSpreadsheet, RefreshCw, XCircle, Mail, KeyRound, RotateCcw
         } from 'https://esm.sh/lucide-react@0.294.0?external=react';
         
         import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, parseISO } from 'https://esm.sh/date-fns@2.30.0';
@@ -108,7 +111,6 @@
         
         // Auth Providers
         const googleProvider = new GoogleAuthProvider();
-        // Apple provider removed
         
         const appId = "vhr2-0-production"; 
 
@@ -192,7 +194,6 @@
         const DialogHeader = ({ className, ...props }) => <div className={`flex flex-col space-y-1.5 text-center sm:text-left mb-4 ${className || ''}`} {...props} />;
         const DialogTitle = ({ className, ...props }) => <h2 className={`text-lg font-semibold leading-none tracking-tight ${className || ''}`} {...props} />;
 
-        // Reusable Confirmation Modal
         const ConfirmDialog = ({ open, onOpenChange, title, description, onConfirm, isLoading }) => (
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent>
@@ -313,7 +314,6 @@
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
-                    {/* Mobile Header */}
                     <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
                         <div className="flex items-center justify-between px-4 py-3">
                             <div className="flex items-center gap-3">
@@ -328,7 +328,6 @@
                         </div>
                     </div>
 
-                    {/* Sidebar */}
                     <aside className={`fixed left-0 top-0 bottom-0 w-72 bg-[var(--primary)] text-white z-40 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                         <div className="flex flex-col h-full">
                             <div className="p-6 border-b border-white/10">
@@ -396,7 +395,6 @@
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
             
-            // Reset Password State
             const [isResetOpen, setIsResetOpen] = useState(false);
             const [resetEmail, setResetEmail] = useState('');
             const [resetStatus, setResetStatus] = useState({ type: '', msg: '' });
@@ -433,13 +431,7 @@
                     await checkAndCreateUser(result.user, result.user.displayName || 'User');
                 } catch (err) {
                     console.error(err);
-                    if (err.code === 'auth/operation-not-allowed') {
-                        setError(`Помилка: Вхід через ${providerName} вимкнено. Активуйте його в Firebase Console.`);
-                    } else if (err.code === 'auth/account-exists-with-different-credential') {
-                        setError("Акаунт з таким email вже існує, використайте інший метод входу.");
-                    } else {
-                        setError(err.message);
-                    }
+                    setError(err.message);
                 } finally {
                     setLoading(false);
                 }
@@ -460,12 +452,7 @@
                         await checkAndCreateUser(userCredential.user, name);
                     }
                 } catch (err) {
-                    console.error(err);
-                    let msg = err.message;
-                    // Error handling simplified
-                    if (err.code === 'auth/invalid-credential') msg = "Невірний email або пароль.";
-                    else if (err.code === 'auth/email-already-in-use') msg = "Email вже використовується.";
-                    setError(msg);
+                    setError(err.message);
                 } finally {
                     setLoading(false);
                 }
@@ -477,7 +464,7 @@
                 setLoading(true);
                 try {
                     await sendPasswordResetEmail(auth, resetEmail);
-                    setResetStatus({ type: 'success', msg: 'Лист з інструкціями відправлено на ваш Email! Перевірте папку "Спам", якщо не бачите листа.' });
+                    setResetStatus({ type: 'success', msg: 'Лист з інструкціями відправлено на ваш Email!' });
                     setTimeout(() => { setIsResetOpen(false); setResetStatus({type:'', msg:''}); }, 5000);
                 } catch (err) {
                     setResetStatus({ type: 'error', msg: err.message });
@@ -1139,56 +1126,67 @@
 
         function Voting({ user }) {
             const [polls, setPolls] = useState([]);
+            const [userMap, setUserMap] = useState({});
             const [newPoll, setNewPoll] = useState({ title: '', description: '', options: ['', ''], category: 'Other', closing_date: '', min_quorum: 0, anonymous: false });
             const [isCreateOpen, setIsCreateOpen] = useState(false);
             const [deleteId, setDeleteId] = useState(null);
+            const [addOptText, setAddOptText] = useState('');
+            const [activePollId, setActivePollId] = useState(null);
 
             useEffect(() => {
                 if (!user) return;
-                return onSnapshot(query(getCollectionRef('polls'), orderBy('created_date', 'desc')), snap => {
+                const u1 = onSnapshot(query(getCollectionRef('polls'), orderBy('created_date', 'desc')), snap => {
                     setPolls(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 }, (err) => console.log(err));
+                const u2 = onSnapshot(getCollectionRef('users'), snap => {
+                    const m = {}; snap.docs.forEach(d => m[d.id] = d.data().full_name);
+                    setUserMap(m);
+                });
+                return () => { u1(); u2(); };
             }, [user]);
 
             const createPoll = async () => {
                 const validOpts = newPoll.options.filter(o => o);
                 if (!newPoll.title || validOpts.length < 2) return;
                 
-                const results = {};
-                validOpts.forEach((o, i) => results[i] = 0);
-                
                 await addDoc(getCollectionRef('polls'), {
                     ...newPoll,
                     options: validOpts,
-                    results,
-                    voters: [],
+                    votes: {}, 
                     status: 'active',
-                    created_date: new Date().toISOString(),
-                    total_votes: 0
+                    created_date: new Date().toISOString()
                 });
                 logAction(user, 'create', 'Poll', `Poll created: ${newPoll.title}`);
                 setIsCreateOpen(false);
                 setNewPoll({ title: '', description: '', options: ['', ''], category: 'Other', closing_date: '', min_quorum: 0, anonymous: false });
             };
 
-            const vote = async (poll, optIndex) => {
-                if (poll.voters?.includes(user.id)) return;
-                const newResults = { ...poll.results };
-                newResults[optIndex] = (newResults[optIndex] || 0) + 1;
-                await updateDoc(doc(getCollectionRef('polls'), poll.id), {
-                    results: newResults,
-                    total_votes: (poll.total_votes || 0) + 1,
-                    voters: [...(poll.voters || []), user.id]
-                });
+            const handleVote = async (poll, optIndex) => {
+                await updateDoc(doc(getCollectionRef('polls'), poll.id), { [`votes.${user.id}`]: optIndex });
+            };
+
+            const cancelVote = async (poll) => {
+                await updateDoc(doc(getCollectionRef('polls'), poll.id), { [`votes.${user.id}`]: deleteField() });
             };
             
-            const handleDelete = async () => {
+            const deletePoll = async () => {
                 if (deleteId) {
                     await deleteDoc(doc(getCollectionRef('polls'), deleteId));
                     logAction(user, 'delete', 'Poll', `Poll deleted: ${deleteId}`);
                     setDeleteId(null);
                 }
             };
+
+            const addOption = async (pollId) => {
+                if(!addOptText.trim()) return;
+                await updateDoc(doc(getCollectionRef('polls'), pollId), { options: arrayUnion(addOptText) });
+                setAddOptText('');
+                setActivePollId(null);
+            }
+
+            const removeOption = async (poll, optStr) => {
+                await updateDoc(doc(getCollectionRef('polls'), poll.id), { options: arrayRemove(optStr) });
+            }
 
             return (
                 <div className="space-y-6 animate-in fade-in">
@@ -1245,7 +1243,11 @@
 
                     <div className="space-y-6">
                         {polls.map(poll => {
-                            const hasVoted = poll.voters?.includes(user.id);
+                            const votes = poll.votes || {}; // Fallback for old polls
+                            const userVoteIndex = votes[user.id];
+                            const hasVoted = userVoteIndex !== undefined;
+                            const totalVotes = Object.keys(votes).length;
+
                             return (
                                 <Card key={poll.id} className="border-0 shadow-lg bg-white/80 backdrop-blur">
                                     <CardHeader>
@@ -1255,36 +1257,64 @@
                                         </div>
                                         <p className="text-sm text-gray-500">{poll.description}</p>
                                         <div className="text-sm text-gray-500 flex gap-4 mt-2">
-                                            <span className="flex items-center gap-1"><TrendingUp className="w-4 h-4"/> {poll.total_votes || 0} голосів</span>
-                                            {hasVoted && <span className="text-green-600 flex items-center gap-1 font-medium"><CheckCircle2 className="w-4 h-4"/> Ви проголосували</span>}
+                                            <span className="flex items-center gap-1"><TrendingUp className="w-4 h-4"/> {totalVotes} голосів</span>
+                                            {hasVoted && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-green-600 flex items-center gap-1 font-medium"><CheckCircle2 className="w-4 h-4"/> Ви проголосували</span>
+                                                    <button onClick={() => cancelVote(poll)} className="text-gray-400 hover:text-red-500" title="Скасувати голос"><RotateCcw className="w-4 h-4"/></button>
+                                                </div>
+                                            )}
                                         </div>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        {poll.options.map((opt, i) => {
-                                            const votes = poll.results?.[i] || 0;
-                                            const pct = poll.total_votes ? Math.round((votes/poll.total_votes)*100) : 0;
+                                        {poll.options?.map((opt, i) => {
+                                            const optionVotes = Object.values(votes).filter(v => v === i).length;
+                                            const pct = totalVotes ? Math.round((optionVotes/totalVotes)*100) : 0;
+                                            const votersList = !poll.anonymous ? Object.keys(votes).filter(uid => votes[uid] === i).map(uid => userMap[uid] || 'Unknown') : [];
+
                                             return (
                                                 <div key={i}>
-                                                    <div className="flex justify-between mb-1 text-sm font-medium">
-                                                        <span>{opt}</span>
-                                                        {hasVoted && <span className="text-gray-500">{votes} ({pct}%)</span>}
+                                                    <div className="flex justify-between mb-1 text-sm font-medium items-center">
+                                                        <span className="flex items-center gap-2">
+                                                            {opt}
+                                                            {user.role === 'admin' && <button onClick={() => removeOption(poll, opt)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>}
+                                                        </span>
+                                                        {hasVoted && <span className="text-gray-500">{optionVotes} ({pct}%)</span>}
                                                     </div>
                                                     {hasVoted ? (
-                                                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-emerald-500 transition-all duration-500" style={{width: `${pct}%`}}/>
-                                                        </div>
+                                                        <>
+                                                            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                                                                <div className={`h-full transition-all duration-500 ${userVoteIndex === i ? 'bg-blue-600' : 'bg-emerald-500'}`} style={{width: `${pct}%`}}/>
+                                                            </div>
+                                                            {!poll.anonymous && votersList.length > 0 && (
+                                                                <p className="text-xs text-gray-500 mt-1 ml-1"> голосували: {votersList.join(', ')}</p>
+                                                            )}
+                                                        </>
                                                     ) : (
-                                                        <Button variant="outline" className="w-full justify-start hover:border-blue-500 hover:text-blue-600 transition-all" onClick={() => vote(poll, i)}>Голосувати</Button>
+                                                        <Button variant="outline" className="w-full justify-start hover:border-blue-500 hover:text-blue-600 transition-all" onClick={() => handleVote(poll, i)}>Голосувати</Button>
                                                     )}
                                                 </div>
                                             );
                                         })}
+                                        {user.role === 'admin' && (
+                                            <div className="mt-2">
+                                                {activePollId === poll.id ? (
+                                                    <div className="flex gap-2">
+                                                        <Input value={addOptText} onChange={e => setAddOptText(e.target.value)} placeholder="Нова опція" className="h-8 text-sm"/>
+                                                        <Button size="sm" onClick={() => addOption(poll.id)} variant="success" className="h-8">Add</Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => setActivePollId(null)} className="h-8"><X className="w-4 h-4"/></Button>
+                                                    </div>
+                                                ) : (
+                                                    <Button size="sm" variant="ghost" className="text-xs text-blue-600" onClick={() => setActivePollId(poll.id)}><Plus className="w-3 h-3 mr-1"/> Додати варіант</Button>
+                                                )}
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             );
                         })}
                     </div>
-                    <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Видалити опитування?"/>
+                    <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={deletePoll} title="Видалити опитування?"/>
                 </div>
             );
         }
