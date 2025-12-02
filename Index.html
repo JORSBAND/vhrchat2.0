@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ВГР - Оновлення Системи</title>
+    <meta name="description" content="Сервіс ВГР оновлюється.">
+    
+    <!-- Шрифти -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050b14; /* Майже чорний */
+            color: #ffffff;
+            font-family: 'Montserrat', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Екран входу (для запуску аудіо) */
+        #enter-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            background: rgba(5, 11, 20, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: opacity 0.8s ease;
+        }
+
+        .enter-text {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.2rem;
+            letter-spacing: 0.1em;
+            animation: pulseText 2s infinite;
+            text-align: center;
+        }
+
+        /* Основний контент */
+        .content-wrapper {
+            position: relative;
+            z-index: 10;
+            opacity: 0; /* Спочатку приховано */
+            transition: opacity 1.5s ease 0.5s;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .content-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 30px;
+            padding: 3rem;
+            max-width: 700px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Типографіка */
+        h1 {
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+        }
+
+        .tech-font {
+            font-family: 'Space Mono', monospace;
+        }
+
+        /* Кнопка звуку */
+        .sound-control {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 1s;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .sound-control:hover { background: rgba(255, 255, 255, 0.15); }
+        .sound-control svg { fill: white; width: 24px; height: 24px; }
+
+        @keyframes pulseText {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Адаптивність тексту */
+        @media (min-width: 768px) {
+            h1 { font-size: 3.5rem; }
+            .content-card { padding: 4rem; }
+        }
+        @media (max-width: 767px) {
+            h1 { font-size: 2rem; }
+            .content-card { padding: 2rem 1.5rem; }
+            .enter-text { font-size: 0.9rem; padding: 0 20px; }
+            .sound-control { top: 20px; right: 20px; width: 40px; height: 40px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Екран входу -->
+    <div id="enter-screen">
+        <div class="enter-text">
+            [ НАТИСНІТЬ БУДЬ-ДЕ ДЛЯ ВХОДУ ]<br>
+            <span class="text-xs text-gray-500 mt-2 block font-sans">Вмикає звук та атмосферу</span>
+        </div>
+    </div>
+
+    <!-- Фон -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Музика -->
+    <audio id="bg-music" loop preload="auto">
+        <!-- Посилання на надійний файл Ambient -->
+        <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- Кнопка звуку (з'являється після входу) -->
+    <button class="sound-control" id="sound-btn">
+        <svg id="icon-sound" viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+        </svg>
+        <svg id="icon-mute" viewBox="0 0 24 24" style="display: none;">
+            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+        </svg>
+    </button>
+
+    <!-- Головний блок -->
+    <div class="content-wrapper" id="main-content">
+        <div class="content-card">
+            <div class="mb-6 flex justify-center items-center gap-2">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                </span>
+                <span class="tech-font text-xs text-blue-300 tracking-[0.2em] uppercase">System Upgrade</span>
+            </div>
+
+            <h1>ВГР - СЕРВІС</h1>
+
+            <p class="text-gray-300 text-lg md:text-xl leading-relaxed mb-8 font-light">
+                Сервіс тимчасово недоступний.<br>
+                Відбувається масштабна перебудова архітектури.
+            </p>
+
+            <div class="tech-font text-xs md:text-sm text-gray-500 border-t border-gray-700 pt-6 mt-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <span class="block text-gray-600 uppercase mb-1">Status</span>
+                        <span class="text-blue-400">REFACTORING</span>
+                    </div>
+                    <div>
+                        <span class="block text-gray-600 uppercase mb-1">ETA</span>
+                        <span class="text-purple-400">UNKNOWN</span>
+                    </div>
+                    <div>
+                        <span class="block text-gray-600 uppercase mb-1">Module</span>
+                        <span class="text-green-400">CORE_V2</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ЛОГІКА ВХОДУ ТА МУЗИКИ ---
+        const enterScreen = document.getElementById('enter-screen');
+        const mainContent = document.getElementById('main-content');
+        const soundBtn = document.getElementById('sound-btn');
+        const audio = document.getElementById('bg-music');
+        const iconSound = document.getElementById('icon-sound');
+        const iconMute = document.getElementById('icon-mute');
+        
+        let audioPlaying = false;
+        audio.volume = 0.3; // Тиха фонова гучність
+
+        // Початковий клік для запуску
+        enterScreen.addEventListener('click', () => {
+            enterScreen.style.opacity = '0';
+            setTimeout(() => enterScreen.remove(), 800);
+            
+            // Показуємо контент
+            mainContent.style.opacity = '1';
+            soundBtn.style.opacity = '1';
+            
+            // Запускаємо музику
+            audio.play().then(() => {
+                audioPlaying = true;
+            }).catch(e => console.error("Audio block:", e));
+        });
+
+        // Кнопка Mute/Unmute
+        soundBtn.addEventListener('click', () => {
+            if (audioPlaying) {
+                audio.pause();
+                iconSound.style.display = 'none';
+                iconMute.style.display = 'block';
+            } else {
+                audio.play();
+                iconSound.style.display = 'block';
+                iconMute.style.display = 'none';
+            }
+            audioPlaying = !audioPlaying;
+        });
+
+        // --- ВІЗУАЛІЗАЦІЯ (PARTICLES + WORDS) ---
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Слова, що будуть з'являтися
+        const wordsList = [
+            "ВГР-РІШУЧА", 
+            "СМІЛИВА", 
+            "НЕПОХИТНА", 
+            "ВПЕВНЕНА", 
+            "ВІДВАЖНА", 
+            "ЦІЛЕСПРЯМОВАНА", 
+            "СТІЙКА",
+            "ПОТУЖНА",
+            "ГРАНДІОЗНА",
+            "SYSTEM_CORE",
+            "UPGRADE",
+            "FUTURE"
+        ];
+
+        let width, height;
+        let particles = [];
+        let floatingWords = [];
+        
+        // Налаштування
+        const config = {
+            particleCount: 60,
+            linkDist: 150,
+            wordSpawnRate: 0.008, // Шанс появи слова в кожному кадрі
+            baseColor: '100, 116, 139' // Slate-500 rgb
+        };
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            // Менше частинок на мобільному для продуктивності
+            config.particleCount = width < 768 ? 35 : 70;
+            initParticles();
+        }
+        window.addEventListener('resize', resize);
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.size = Math.random() * 2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${config.baseColor}, 0.5)`;
+                ctx.fill();
+            }
+        }
+
+        class FloatingWord {
+            constructor() {
+                this.text = wordsList[Math.floor(Math.random() * wordsList.length)];
+                this.x = Math.random() * (width - 100) + 50;
+                this.y = Math.random() * (height - 50) + 25;
+                this.life = 0;
+                this.maxLife = 200 + Math.random() * 100; // Час життя
+                this.opacity = 0;
+                this.size = Math.floor(Math.random() * 10) + 12; // 12px - 22px
+                // Слово трохи пливе вгору
+                this.vy = -0.2 - Math.random() * 0.3; 
+            }
+            
+            update() {
+                this.life++;
+                this.y += this.vy;
+                
+                // Fade in / Fade out logic
+                if (this.life < 50) {
+                    this.opacity = this.life / 50;
+                } else if (this.life > this.maxLife - 50) {
+                    this.opacity = (this.maxLife - this.life) / 50;
+                }
+                
+                // Максимальна прозорість не 1, а трохи менше, щоб було "примарно"
+                if (this.opacity > 0.6) this.opacity = 0.6;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.font = `${this.size}px 'Space Mono', monospace`;
+                
+                // Виділяємо слово "ВГР-РІШУЧА" іншим кольором
+                if (this.text.includes("ВГР")) {
+                    ctx.fillStyle = '#60a5fa'; // Блакитний
+                    ctx.shadowColor = '#60a5fa';
+                    ctx.shadowBlur = 10;
+                } else {
+                    ctx.fillStyle = '#94a3b8'; // Сірий
+                    ctx.shadowBlur = 0;
+                }
+                
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+            
+            isDead() {
+                return this.life >= this.maxLife;
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < config.particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Градієнт фону
+            let gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#020617');
+            gradient.addColorStop(1, '#0f172a');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Оновлення частинок
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            // Лінії між частинками
+            ctx.lineWidth = 1;
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i; j < particles.length; j++) {
+                    let dx = particles[i].x - particles[j].x;
+                    let dy = particles[i].y - particles[j].y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < config.linkDist) {
+                        let opacity = 1 - (dist / config.linkDist);
+                        ctx.strokeStyle = `rgba(${config.baseColor}, ${opacity * 0.15})`;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Спавн слів
+            if (Math.random() < config.wordSpawnRate) {
+                floatingWords.push(new FloatingWord());
+            }
+
+            // Оновлення та малювання слів
+            for (let i = floatingWords.length - 1; i >= 0; i--) {
+                let fw = floatingWords[i];
+                fw.update();
+                fw.draw();
+                if (fw.isDead()) {
+                    floatingWords.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Старт
+        resize();
+        animate();
+    </script>
+</body>
+</html>
+
+
