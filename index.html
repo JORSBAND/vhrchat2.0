@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ВГР - Оновлення Системи</title>
-    <meta name="description" content="Сервіс ВГР оновлюється.">
+    <title>ВГР - System Update</title>
     
-    <!-- Шрифти -->
+    <!-- Шрифти: Space Mono для термінального стилю, Montserrat для основного -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,7 +17,7 @@
         body {
             margin: 0;
             padding: 0;
-            background-color: #050b14; /* Майже чорний */
+            background-color: #050b14;
             color: #ffffff;
             font-family: 'Montserrat', sans-serif;
             overflow: hidden;
@@ -38,7 +37,7 @@
             z-index: 1;
         }
 
-        /* Екран входу (для запуску аудіо) */
+        /* Екран входу */
         #enter-screen {
             position: fixed;
             top: 0;
@@ -46,7 +45,7 @@
             width: 100%;
             height: 100%;
             z-index: 100;
-            background: rgba(5, 11, 20, 0.95);
+            background: rgba(5, 11, 20, 0.98); /* Трохи темніше */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -56,17 +55,17 @@
 
         .enter-text {
             font-family: 'Space Mono', monospace;
-            font-size: 1.2rem;
-            letter-spacing: 0.1em;
+            font-size: 1.1rem;
+            letter-spacing: 0.15em;
             animation: pulseText 2s infinite;
             text-align: center;
+            color: #4ade80; /* Термінальний зелений */
         }
 
-        /* Основний контент */
         .content-wrapper {
             position: relative;
             z-index: 10;
-            opacity: 0; /* Спочатку приховано */
+            opacity: 0;
             transition: opacity 1.5s ease 0.5s;
             width: 100%;
             display: flex;
@@ -75,19 +74,18 @@
         }
 
         .content-card {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 30px;
-            padding: 3rem;
-            max-width: 700px;
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            max-width: 650px;
             width: 100%;
             text-align: center;
-            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
         }
 
-        /* Типографіка */
         h1 {
             background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
             -webkit-background-clip: text;
@@ -96,11 +94,18 @@
             margin-bottom: 1.5rem;
         }
 
-        .tech-font {
+        /* Стиль для нижньої технічної частини (V1 style) */
+        .tech-info {
             font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: left;
+            line-height: 1.6;
         }
 
-        /* Кнопка звуку */
         .sound-control {
             position: absolute;
             top: 30px;
@@ -122,13 +127,12 @@
         .sound-control svg { fill: white; width: 24px; height: 24px; }
 
         @keyframes pulseText {
-            0%, 100% { opacity: 0.5; }
-            50% { opacity: 1; }
+            0%, 100% { opacity: 0.6; text-shadow: 0 0 5px rgba(74, 222, 128, 0.2); }
+            50% { opacity: 1; text-shadow: 0 0 15px rgba(74, 222, 128, 0.6); }
         }
 
-        /* Адаптивність тексту */
         @media (min-width: 768px) {
-            h1 { font-size: 3.5rem; }
+            h1 { font-size: 3rem; }
             .content-card { padding: 4rem; }
         }
         @media (max-width: 767px) {
@@ -136,6 +140,7 @@
             .content-card { padding: 2rem 1.5rem; }
             .enter-text { font-size: 0.9rem; padding: 0 20px; }
             .sound-control { top: 20px; right: 20px; width: 40px; height: 40px; }
+            .tech-info { font-size: 0.75rem; }
         }
     </style>
 </head>
@@ -144,21 +149,19 @@
     <!-- Екран входу -->
     <div id="enter-screen">
         <div class="enter-text">
-            [ НАТИСНІТЬ БУДЬ-ДЕ ДЛЯ ВХОДУ ]<br>
-            <span class="text-xs text-gray-500 mt-2 block font-sans">Вмикає звук та атмосферу</span>
+            > [ НАТИСНІТЬ, ЩОБ ПРОДОВЖИТИ ]_
         </div>
     </div>
 
     <!-- Фон -->
     <canvas id="bg-canvas"></canvas>
 
-    <!-- Музика -->
+    <!-- Аудіо -->
     <audio id="bg-music" loop preload="auto">
-        <!-- Посилання на надійний файл Ambient -->
         <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3" type="audio/mpeg">
     </audio>
 
-    <!-- Кнопка звуку (з'являється після входу) -->
+    <!-- Кнопка звуку -->
     <button class="sound-control" id="sound-btn">
         <svg id="icon-sound" viewBox="0 0 24 24">
             <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
@@ -168,45 +171,37 @@
         </svg>
     </button>
 
-    <!-- Головний блок -->
+    <!-- Основний контент -->
     <div class="content-wrapper" id="main-content">
         <div class="content-card">
             <div class="mb-6 flex justify-center items-center gap-2">
-                <span class="relative flex h-3 w-3">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                </span>
-                <span class="tech-font text-xs text-blue-300 tracking-[0.2em] uppercase">System Upgrade</span>
+                <span class="status-indicator w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.5)]"></span>
+                <span class="font-['Space_Mono'] text-xs text-amber-500 tracking-[0.15em] uppercase">Maintenance Mode</span>
             </div>
 
             <h1>ВГР - СЕРВІС</h1>
 
-            <p class="text-gray-300 text-lg md:text-xl leading-relaxed mb-8 font-light">
-                Сервіс тимчасово недоступний.<br>
-                Відбувається масштабна перебудова архітектури.
+            <p class="text-gray-300 text-lg leading-relaxed mb-6 font-light">
+                Зараз сервіс ВГР тимчасово не працює.<br>
+                Відбуваються зміни в коді.
+            </p>
+            
+            <p class="text-slate-400 text-sm mb-2">
+                Термін відновлення не визначений.
             </p>
 
-            <div class="tech-font text-xs md:text-sm text-gray-500 border-t border-gray-700 pt-6 mt-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <span class="block text-gray-600 uppercase mb-1">Status</span>
-                        <span class="text-blue-400">REFACTORING</span>
-                    </div>
-                    <div>
-                        <span class="block text-gray-600 uppercase mb-1">ETA</span>
-                        <span class="text-purple-400">UNKNOWN</span>
-                    </div>
-                    <div>
-                        <span class="block text-gray-600 uppercase mb-1">Module</span>
-                        <span class="text-green-400">CORE_V2</span>
-                    </div>
-                </div>
+            <!-- Технічний статус (Стиль 1) -->
+            <div class="tech-info">
+                > System status: Updating core modules...<br>
+                > Process: Refactoring backend architecture<br>
+                > Estimated time: Undefined<br>
+                <span class="animate-pulse">> _</span>
             </div>
         </div>
     </div>
 
     <script>
-        // --- ЛОГІКА ВХОДУ ТА МУЗИКИ ---
+        // --- ЛОГІКА ВХОДУ ---
         const enterScreen = document.getElementById('enter-screen');
         const mainContent = document.getElementById('main-content');
         const soundBtn = document.getElementById('sound-btn');
@@ -215,24 +210,16 @@
         const iconMute = document.getElementById('icon-mute');
         
         let audioPlaying = false;
-        audio.volume = 0.3; // Тиха фонова гучність
+        audio.volume = 0.3;
 
-        // Початковий клік для запуску
         enterScreen.addEventListener('click', () => {
             enterScreen.style.opacity = '0';
             setTimeout(() => enterScreen.remove(), 800);
-            
-            // Показуємо контент
             mainContent.style.opacity = '1';
             soundBtn.style.opacity = '1';
-            
-            // Запускаємо музику
-            audio.play().then(() => {
-                audioPlaying = true;
-            }).catch(e => console.error("Audio block:", e));
+            audio.play().then(() => { audioPlaying = true; }).catch(e => console.error(e));
         });
 
-        // Кнопка Mute/Unmute
         soundBtn.addEventListener('click', () => {
             if (audioPlaying) {
                 audio.pause();
@@ -246,42 +233,32 @@
             audioPlaying = !audioPlaying;
         });
 
-        // --- ВІЗУАЛІЗАЦІЯ (PARTICLES + WORDS) ---
+        // --- ВІЗУАЛІЗАЦІЯ ---
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
         
-        // Слова, що будуть з'являтися
-        const wordsList = [
-            "ВГР-РІШУЧА", 
-            "СМІЛИВА", 
-            "НЕПОХИТНА", 
-            "ВПЕВНЕНА", 
-            "ВІДВАЖНА", 
-            "ЦІЛЕСПРЯМОВАНА", 
-            "СТІЙКА",
-            "ПОТУЖНА",
-            "ГРАНДІОЗНА",
-            "SYSTEM_CORE",
-            "UPGRADE",
-            "FUTURE"
+        const adjectives = [
+            "ГРАНДІОЗНА", "РІШУЧА", "СМІЛИВА", "ВПЕВНЕНА", 
+            "ВІДВАЖНА", "ЦІЛЕСПРЯМОВАНА", "СТІЙКА", "ПОТУЖНА", 
+            "НЕПОХИТНА", "БЕЗМЕЖНА", "ІННОВАЦІЙНА", "КРЕАТИВНА",
+            "НАДІЙНА", "СТРАТЕГІЧНА", "ЕФЕКТИВНА", "СУЧАСНА",
+            "ШВИДКА", "ГНУЧКА", "АМБІТНА", "НЗЛАМНА"
         ];
 
         let width, height;
         let particles = [];
         let floatingWords = [];
         
-        // Налаштування
         const config = {
             particleCount: 60,
             linkDist: 150,
-            wordSpawnRate: 0.008, // Шанс появи слова в кожному кадрі
-            baseColor: '100, 116, 139' // Slate-500 rgb
+            wordSpawnRate: 0.012,
+            baseColor: '100, 116, 139'
         };
 
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
-            // Менше частинок на мобільному для продуктивності
             config.particleCount = width < 768 ? 35 : 70;
             initParticles();
         }
@@ -311,54 +288,65 @@
 
         class FloatingWord {
             constructor() {
-                this.text = wordsList[Math.floor(Math.random() * wordsList.length)];
-                this.x = Math.random() * (width - 100) + 50;
+                const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+                this.text = "ВГР-" + randomAdjective;
+                this.x = Math.random() * (width - 200) + 50;
                 this.y = Math.random() * (height - 50) + 25;
                 this.life = 0;
-                this.maxLife = 200 + Math.random() * 100; // Час життя
+                this.maxLife = 200 + Math.random() * 100;
                 this.opacity = 0;
-                this.size = Math.floor(Math.random() * 10) + 12; // 12px - 22px
-                // Слово трохи пливе вгору
-                this.vy = -0.2 - Math.random() * 0.3; 
+                
+                // Визначаємо стиль: 30% шанс бути "Командним рядком"
+                this.isConsole = Math.random() < 0.3;
+                
+                const isMobile = width < 600;
+                
+                if (this.isConsole) {
+                    this.size = isMobile ? 10 : 12;
+                    this.vy = -0.1 - Math.random() * 0.2; // Повільніше
+                } else {
+                    this.size = isMobile ? Math.floor(Math.random() * 6) + 10 : Math.floor(Math.random() * 8) + 12;
+                    this.vy = -0.2 - Math.random() * 0.3;
+                }
             }
             
             update() {
                 this.life++;
                 this.y += this.vy;
+                if (this.life < 50) this.opacity = this.life / 50;
+                else if (this.life > this.maxLife - 50) this.opacity = (this.maxLife - this.life) / 50;
                 
-                // Fade in / Fade out logic
-                if (this.life < 50) {
-                    this.opacity = this.life / 50;
-                } else if (this.life > this.maxLife - 50) {
-                    this.opacity = (this.maxLife - this.life) / 50;
-                }
-                
-                // Максимальна прозорість не 1, а трохи менше, щоб було "примарно"
-                if (this.opacity > 0.6) this.opacity = 0.6;
+                let maxOp = this.isConsole ? 0.9 : 0.6;
+                if (this.opacity > maxOp) this.opacity = maxOp;
             }
             
             draw() {
                 ctx.save();
                 ctx.globalAlpha = this.opacity;
-                ctx.font = `${this.size}px 'Space Mono', monospace`;
                 
-                // Виділяємо слово "ВГР-РІШУЧА" іншим кольором
-                if (this.text.includes("ВГР")) {
-                    ctx.fillStyle = '#60a5fa'; // Блакитний
-                    ctx.shadowColor = '#60a5fa';
-                    ctx.shadowBlur = 10;
+                if (this.isConsole) {
+                    // Стиль командного рядка
+                    ctx.font = `${this.size}px 'Space Mono', monospace`;
+                    ctx.fillStyle = '#4ade80'; // Яскравий зелений
+                    ctx.shadowColor = '#4ade80';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText(`> ${this.text}_`, this.x, this.y);
                 } else {
-                    ctx.fillStyle = '#94a3b8'; // Сірий
-                    ctx.shadowBlur = 0;
+                    // Звичайний стиль
+                    ctx.font = `bold ${this.size}px 'Montserrat', sans-serif`;
+                    // Відтінки синього/фіолетового
+                    const colors = ['#60a5fa', '#818cf8', '#a78bfa']; 
+                    const color = colors[Math.floor(this.text.length % 3)]; 
+                    ctx.fillStyle = color;
+                    ctx.shadowColor = color;
+                    ctx.shadowBlur = 8;
+                    ctx.fillText(this.text, this.x, this.y);
                 }
                 
-                ctx.fillText(this.text, this.x, this.y);
                 ctx.restore();
             }
             
-            isDead() {
-                return this.life >= this.maxLife;
-            }
+            isDead() { return this.life >= this.maxLife; }
         }
 
         function initParticles() {
@@ -370,28 +358,20 @@
 
         function animate() {
             ctx.clearRect(0, 0, width, height);
-
-            // Градієнт фону
             let gradient = ctx.createLinearGradient(0, 0, 0, height);
             gradient.addColorStop(0, '#020617');
             gradient.addColorStop(1, '#0f172a');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, width, height);
 
-            // Оновлення частинок
-            particles.forEach(p => {
-                p.update();
-                p.draw();
-            });
+            particles.forEach(p => { p.update(); p.draw(); });
 
-            // Лінії між частинками
             ctx.lineWidth = 1;
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i; j < particles.length; j++) {
                     let dx = particles[i].x - particles[j].x;
                     let dy = particles[i].y - particles[j].y;
                     let dist = Math.sqrt(dx*dx + dy*dy);
-                    
                     if (dist < config.linkDist) {
                         let opacity = 1 - (dist / config.linkDist);
                         ctx.strokeStyle = `rgba(${config.baseColor}, ${opacity * 0.15})`;
@@ -403,34 +383,21 @@
                 }
             }
 
-            // Спавн слів
             if (Math.random() < config.wordSpawnRate) {
                 floatingWords.push(new FloatingWord());
             }
 
-            // Оновлення та малювання слів
             for (let i = floatingWords.length - 1; i >= 0; i--) {
                 let fw = floatingWords[i];
                 fw.update();
                 fw.draw();
-                if (fw.isDead()) {
-                    floatingWords.splice(i, 1);
-                }
+                if (fw.isDead()) floatingWords.splice(i, 1);
             }
-
             requestAnimationFrame(animate);
         }
 
-        // Старт
         resize();
         animate();
     </script>
 </body>
 </html>
-
-
-
-
-  
-
-
